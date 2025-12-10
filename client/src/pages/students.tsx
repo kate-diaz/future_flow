@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Users, 
   Search, 
@@ -23,7 +25,23 @@ import {
   FileText,
   BarChart3,
   Calendar,
+  MoreVertical,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Student {
   id: string;
@@ -87,14 +105,32 @@ function getInitials(name: string): string {
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<Student | null>(null);
+  const { toast } = useToast();
 
-  const { data: students = [], isLoading } = useQuery<Student[]>({
+  const { data: students = [], isLoading, refetch } = useQuery<Student[]>({
     queryKey: ["/api/admin/students"],
   });
 
   const { data: analytics, isLoading: isLoadingAnalytics } = useQuery<StudentAnalytics>({
     queryKey: selectedStudent ? [`/api/admin/students/${selectedStudent.id}/analytics`] : [],
     enabled: !!selectedStudent,
+  });
+
+  const deleteStudentMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      await apiRequest("DELETE", `/api/admin/students/${studentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/students"] });
+      toast({ title: "Student deleted successfully" });
+      setDeleteConfirmation(null);
+      setSelectedStudent(null);
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Failed to delete student", variant: "destructive" });
+    },
   });
 
   const filteredStudents = students.filter(student =>
@@ -181,20 +217,28 @@ export default function StudentsPage() {
                     </div>
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedStudent(student)}
-                      >
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Analytics
-                      </Button>
-                      <Button
                         size="sm"
                         onClick={() => window.location.href = `/students/${student.id}`}
                       >
                         <FileText className="mr-2 h-4 w-4" />
                         View Profile
                       </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => setDeleteConfirmation(student)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Student
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))}
@@ -499,6 +543,30 @@ export default function StudentsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteConfirmation} onOpenChange={() => setDeleteConfirmation(null)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete Student</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete <strong>{deleteConfirmation?.name}</strong>? This action cannot be undone. All their data including goals, profiles, and progress will be permanently deleted.
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-4">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmation) {
+                  deleteStudentMutation.mutate(deleteConfirmation.id);
+                }
+              }}
+              disabled={deleteStudentMutation.isPending}
+            >
+              {deleteStudentMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

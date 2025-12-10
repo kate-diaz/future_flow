@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
   GraduationCap,
@@ -22,6 +24,8 @@ import {
   Calendar,
   Mail,
   User,
+  Eye,
+  Lock,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
@@ -93,7 +97,9 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'
 export default function StudentDetailPage() {
   const params = useParams();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const studentId = params.id;
+  const isAdmin = user?.role === "admin";
 
   const { data: profile, isLoading: isLoadingProfile } = useQuery<StudentProfile>({
     queryKey: [`/api/admin/students/${studentId}/profile`],
@@ -142,6 +148,15 @@ export default function StudentDetailPage() {
   return (
     <Layout title={`Student Profile - ${displayUser?.name || 'Loading...'}`}>
       <div className="space-y-6">
+        {isAdmin && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Eye className="h-4 w-4 text-primary" />
+            <AlertDescription>
+              <strong>Admin View</strong> - You are viewing this student's profile in read-only mode. No changes can be made from here.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center gap-4">
           <Button
             variant="outline"

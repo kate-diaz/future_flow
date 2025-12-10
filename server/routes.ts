@@ -164,6 +164,18 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
+  app.patch("/api/careers/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [career] = await db.update(careers)
+        .set(req.body)
+        .where(eq(careers.id, req.params.id))
+        .returning();
+      res.json(career);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update career" });
+    }
+  });
+
   app.delete("/api/careers/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       await db.delete(careers).where(eq(careers.id, req.params.id));
@@ -258,6 +270,18 @@ export function registerRoutes(app: express.Application) {
   });
 
   app.put("/api/opportunities/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [opportunity] = await db.update(opportunities)
+        .set(req.body)
+        .where(eq(opportunities.id, req.params.id))
+        .returning();
+      res.json(opportunity);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update opportunity" });
+    }
+  });
+
+  app.patch("/api/opportunities/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const [opportunity] = await db.update(opportunities)
         .set(req.body)
@@ -635,6 +659,13 @@ export function registerRoutes(app: express.Application) {
 
   app.post("/api/profile", requireAuth, async (req: Request, res: Response) => {
     try {
+      // Update user name if provided
+      if (req.body.name) {
+        await db.update(users)
+          .set({ name: req.body.name })
+          .where(eq(users.id, req.session.userId!));
+      }
+
       const existing = await db.query.profiles.findFirst({
         where: eq(profiles.userId, req.session.userId!),
       });
@@ -732,6 +763,36 @@ export function registerRoutes(app: express.Application) {
       res.json(students);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // Delete student (admin only)
+  app.delete("/api/admin/students/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const studentId = req.params.id;
+
+      // Check if student exists
+      const student = await db.query.users.findFirst({
+        where: eq(users.id, studentId),
+      });
+
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Delete related data in order of dependencies
+      await db.delete(opportunityApplications).where(eq(opportunityApplications.userId, studentId));
+      await db.delete(savedOpportunities).where(eq(savedOpportunities.userId, studentId));
+      await db.delete(progressRecords).where(eq(progressRecords.userId, studentId));
+      await db.delete(academicModules).where(eq(academicModules.userId, studentId));
+      await db.delete(goals).where(eq(goals.userId, studentId));
+      await db.delete(profiles).where(eq(profiles.userId, studentId));
+      await db.delete(users).where(eq(users.id, studentId));
+
+      res.json({ message: "Student deleted successfully" });
+    } catch (error) {
+      console.error("Failed to delete student:", error);
+      res.status(500).json({ error: "Failed to delete student" });
     }
   });
 

@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -37,19 +39,33 @@ import {
   FileText,
   Send,
   X,
+  Eye,
+  AlertCircle,
 } from "lucide-react";
 import type { Opportunity, SavedOpportunity, OpportunityApplication } from "@shared/schema";
 
 function OpportunityCard({
   opportunity,
   isSaved,
+  isApplied,
   onToggleSave,
   onApply,
+  onViewApplication,
+  onEdit,
+  onDelete,
+  isAdmin,
+  showEditDelete,
 }: {
   opportunity: Opportunity;
   isSaved: boolean;
+  isApplied: boolean;
   onToggleSave: () => void;
   onApply: () => void;
+  onViewApplication?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isAdmin?: boolean;
+  showEditDelete?: boolean;
 }) {
   const isInternship = opportunity.type === "internship";
 
@@ -80,18 +96,41 @@ function OpportunityCard({
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleSave}
-            data-testid={`button-save-${opportunity.id}`}
-          >
-            {isSaved ? (
-              <BookmarkCheck className="h-5 w-5 text-primary" />
-            ) : (
-              <Bookmark className="h-5 w-5" />
+          <div className="flex items-center gap-2">
+            {showEditDelete && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onEdit}
+                  title="Edit application"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDelete}
+                  className="text-destructive hover:text-destructive"
+                  title="Delete application"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
             )}
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleSave}
+              data-testid={`button-save-${opportunity.id}`}
+            >
+              {isSaved ? (
+                <BookmarkCheck className="h-5 w-5 text-primary" />
+              ) : (
+                <Bookmark className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
         </div>
 
         <p className="mt-3 text-sm text-muted-foreground line-clamp-2">
@@ -135,10 +174,17 @@ function OpportunityCard({
         )}
 
         <div className="mt-4 flex justify-end">
-          <Button onClick={onApply} data-testid={`button-apply-${opportunity.id}`}>
-            <Send className="mr-2 h-4 w-4" />
-            Apply Now
-          </Button>
+          {isApplied && onViewApplication ? (
+            <Button onClick={onViewApplication} variant="outline">
+              <Eye className="mr-2 h-4 w-4" />
+              View Application
+            </Button>
+          ) : (
+            <Button onClick={onApply} data-testid={`button-apply-${opportunity.id}`}>
+              <Send className="mr-2 h-4 w-4" />
+              Apply Now
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -154,10 +200,22 @@ export default function OpportunitiesPage() {
   const [filterLocation, setFilterLocation] = useState<string>("all-locations");
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
+  const [isViewApplicationOpen, setIsViewApplicationOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<OpportunityApplication | null>(null);
   const [formData, setFormData] = useState({ 
+    title: "", 
+    company: "", 
+    description: "", 
+    type: "internship", 
+    location: "", 
+    industry: "",
+    applicationUrl: ""
+  });
+  const [editFormData, setEditFormData] = useState({ 
     title: "", 
     company: "", 
     description: "", 
@@ -308,6 +366,29 @@ export default function OpportunitiesPage() {
     },
   });
 
+  const editOpportunityMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PATCH", `/api/opportunities/${selectedOpportunity!.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities"] });
+      toast({ title: "Opportunity updated successfully" });
+      setIsEditDialogOpen(false);
+      setSelectedOpportunity(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update opportunity", variant: "destructive" });
+    },
+  });
+
+  const handleEditOpportunity = () => {
+    const skills = editFormData.applicationUrl ? [] : [];
+    editOpportunityMutation.mutate({
+      ...editFormData,
+      requiredSkills: skills,
+    });
+  };
+
   const applyMutation = useMutation({
     mutationFn: async ({ opportunityId, data }: { opportunityId: string; data: any }) => {
       await apiRequest("POST", `/api/opportunities/${opportunityId}/apply`, data);
@@ -324,6 +405,19 @@ export default function OpportunitiesPage() {
         description: error.message || "You may have already applied to this opportunity",
         variant: "destructive" 
       });
+    },
+  });
+
+  const deleteApplicationMutation = useMutation({
+    mutationFn: async (applicationId: string) => {
+      await apiRequest("DELETE", `/api/opportunity-applications/${applicationId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunity-applications/mine"] });
+      toast({ title: "Application deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete application", variant: "destructive" });
     },
   });
 
@@ -513,9 +607,21 @@ export default function OpportunitiesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setActiveTab("all") /* placeholder for edit */}>
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedOpportunity(opp);
+                                setEditFormData({
+                                  title: opp.title,
+                                  company: opp.company,
+                                  description: opp.description,
+                                  type: opp.type as "internship" | "job",
+                                  location: opp.location || "",
+                                  industry: opp.industry || "",
+                                  applicationUrl: opp.applicationUrl || "",
+                                });
+                                setIsEditDialogOpen(true);
+                              }}>
                                 <Edit className="mr-2 h-4 w-4" />
-                                Edit (coming soon)
+                                Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -563,20 +669,50 @@ export default function OpportunitiesPage() {
             </div>
           ) : filteredOpportunities && filteredOpportunities.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {filteredOpportunities.map((opportunity) => (
-                <OpportunityCard
-                  key={opportunity.id}
-                  opportunity={opportunity}
-                  isSaved={savedIds.has(opportunity.id)}
-                  onToggleSave={() =>
-                    toggleSaveMutation.mutate({
-                      opportunityId: opportunity.id,
-                      isSaved: savedIds.has(opportunity.id),
-                    })
-                  }
-                  onApply={() => handleApplyClick(opportunity)}
-                />
-              ))}
+              {filteredOpportunities.map((opportunity) => {
+                const application = applications?.find(a => a.opportunityId === opportunity.id);
+                return (
+                  <OpportunityCard
+                    key={opportunity.id}
+                    opportunity={opportunity}
+                    isSaved={savedIds.has(opportunity.id)}
+                    isApplied={appliedIds.has(opportunity.id)}
+                    isAdmin={isAdmin}
+                    showEditDelete={isAdmin || activeTab === "requests"}
+                    onToggleSave={() =>
+                      toggleSaveMutation.mutate({
+                        opportunityId: opportunity.id,
+                        isSaved: savedIds.has(opportunity.id),
+                      })
+                    }
+                    onApply={() => handleApplyClick(opportunity)}
+                    onViewApplication={() => {
+                      if (application) {
+                        setSelectedApplication(application);
+                        setIsViewApplicationOpen(true);
+                      }
+                    }}
+                    onEdit={() => {
+                      const application = applications?.find(a => a.opportunityId === opportunity.id);
+                      if (application) {
+                        setSelectedApplication(application);
+                        setApplicationData({
+                          profilePictureUrl: application.profilePictureUrl || "",
+                          resumeUrl: application.resumeUrl || "",
+                          coverLetter: application.coverLetter || "",
+                        });
+                        setIsApplyDialogOpen(true);
+                      }
+                    }}
+                    onDelete={() => {
+                      const application = applications?.find(a => a.opportunityId === opportunity.id);
+                      if (application) {
+                        deleteApplicationMutation.mutate(application.id);
+                      }
+                    }}
+                  />
+                );
+              })}
             </div>
           ) : (
             <Card>
@@ -705,13 +841,110 @@ export default function OpportunitiesPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Edit Opportunity Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Opportunity</DialogTitle>
+              <DialogDescription>Update the opportunity details</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-title">Title *</Label>
+                <Input
+                  id="edit-title"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="e.g., Software Engineer Internship"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-company">Company *</Label>
+                <Input
+                  id="edit-company"
+                  value={editFormData.company}
+                  onChange={(e) => setEditFormData({ ...editFormData, company: e.target.value })}
+                  placeholder="e.g., Tech Corp"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-type">Type *</Label>
+                  <Select value={editFormData.type} onValueChange={(value) => setEditFormData({ ...editFormData, type: value as "internship" | "job" })}>
+                    <SelectTrigger id="edit-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="internship">Internship</SelectItem>
+                      <SelectItem value="job">Job</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit-location">Location</Label>
+                  <Input
+                    id="edit-location"
+                    value={editFormData.location}
+                    onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                    placeholder="e.g., San Francisco, CA"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="edit-industry">Industry</Label>
+                <Input
+                  id="edit-industry"
+                  value={editFormData.industry}
+                  onChange={(e) => setEditFormData({ ...editFormData, industry: e.target.value })}
+                  placeholder="e.g., Technology"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-description">Description *</Label>
+                <Textarea
+                  id="edit-description"
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Describe the opportunity..."
+                  rows={4}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-applicationUrl">Application URL</Label>
+                <Input
+                  id="edit-applicationUrl"
+                  value={editFormData.applicationUrl}
+                  onChange={(e) => setEditFormData({ ...editFormData, applicationUrl: e.target.value })}
+                  placeholder="https://example.com/apply"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEditOpportunity}
+                  disabled={!editFormData.title || !editFormData.company || !editFormData.description || editOpportunityMutation.isPending}
+                >
+                  {editOpportunityMutation.isPending ? "Updating..." : "Update Opportunity"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Application Dialog */}
         <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Apply for {selectedOpportunity?.title}</DialogTitle>
+              <DialogTitle>
+                {selectedApplication ? "Edit Application" : `Apply for ${selectedOpportunity?.title}`}
+              </DialogTitle>
               <DialogDescription>
-                Submit your application for this opportunity at {selectedOpportunity?.company}
+                {selectedApplication 
+                  ? `Update your application for ${selectedApplication.opportunity?.title}`
+                  : `Submit your application for this opportunity at ${selectedOpportunity?.company}`
+                }
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -781,14 +1014,167 @@ export default function OpportunitiesPage() {
                 <Button variant="outline" onClick={() => setIsApplyDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleSubmitApplication}
-                  disabled={!applicationData.resumeUrl || applyMutation.isPending}
-                >
-                  {applyMutation.isPending ? "Submitting..." : "Submit Application"}
-                </Button>
+                {selectedApplication ? (
+                  <Button 
+                    onClick={() => {
+                      if (!selectedApplication) return;
+                      apiRequest("PATCH", `/api/opportunity-applications/${selectedApplication.id}`, applicationData)
+                        .then(() => {
+                          queryClient.invalidateQueries({ queryKey: ["/api/opportunity-applications/mine"] });
+                          toast({ title: "Application updated successfully" });
+                          setIsApplyDialogOpen(false);
+                          setSelectedApplication(null);
+                        })
+                        .catch((error) => {
+                          toast({ title: "Failed to update application", description: error.message, variant: "destructive" });
+                        });
+                    }}
+                    disabled={!applicationData.resumeUrl}
+                  >
+                    Update Application
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleSubmitApplication}
+                    disabled={!applicationData.resumeUrl || applyMutation.isPending}
+                  >
+                    {applyMutation.isPending ? "Submitting..." : "Submit Application"}
+                  </Button>
+                )}
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Application Dialog */}
+        <Dialog open={isViewApplicationOpen} onOpenChange={setIsViewApplicationOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Application for {selectedApplication?.opportunity?.title}</DialogTitle>
+              <DialogDescription>
+                Application submitted to {selectedApplication?.opportunity?.company}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedApplication && (
+              <div className="space-y-6 mt-4">
+                {/* PDF-like container */}
+                <div className="border-2 border-border rounded-lg bg-white dark:bg-slate-950 p-8 space-y-6">
+                  {/* Profile Section - Left Image, Right Details */}
+                  <div className="grid grid-cols-3 gap-6">
+                    {/* Left: Profile Image */}
+                    <div className="col-span-1 flex flex-col items-center">
+                      <Avatar className="h-32 w-32 mb-4">
+                        <AvatarImage 
+                          src={selectedApplication.profilePictureUrl} 
+                          alt="Profile" 
+                        />
+                        <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                          {selectedApplication.profilePictureUrl ? "?" : "NO IMAGE"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="text-center text-sm text-muted-foreground">Profile Photo</p>
+                    </div>
+
+                    {/* Right: Student Details */}
+                    <div className="col-span-2 space-y-4">
+                      <div>
+                        <h3 className="font-display font-semibold text-lg mb-4">Applicant Information</h3>
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase font-semibold">Resume URL</p>
+                              <a 
+                                href={selectedApplication.resumeUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline text-sm break-all"
+                              >
+                                {selectedApplication.resumeUrl}
+                              </a>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase font-semibold">Application Date</p>
+                              <p className="text-sm font-medium">
+                                {new Date(selectedApplication.appliedAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-semibold">Status</p>
+                            <Badge className="mt-1">{selectedApplication.status}</Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Cover Letter Section */}
+                  <div>
+                    <h3 className="font-display font-semibold text-lg mb-3">Cover Letter</h3>
+                    {selectedApplication.coverLetter ? (
+                      <div className="bg-muted/50 rounded-lg p-4 min-h-32 whitespace-pre-wrap text-sm leading-relaxed">
+                        {selectedApplication.coverLetter}
+                      </div>
+                    ) : (
+                      <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground italic">
+                        No cover letter provided
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Opportunity Details */}
+                  <div>
+                    <h3 className="font-display font-semibold text-lg mb-3">Opportunity Details</h3>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Position</p>
+                        <p className="font-medium">{selectedApplication.opportunity?.title}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Company</p>
+                        <p className="font-medium">{selectedApplication.opportunity?.company}</p>
+                      </div>
+                      {selectedApplication.opportunity?.location && (
+                        <div>
+                          <p className="text-muted-foreground">Location</p>
+                          <p className="font-medium">{selectedApplication.opportunity.location}</p>
+                        </div>
+                      )}
+                      {selectedApplication.opportunity?.type && (
+                        <div>
+                          <p className="text-muted-foreground">Type</p>
+                          <Badge variant="outline">{selectedApplication.opportunity.type}</Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsViewApplicationOpen(false)}>
+                    Close
+                  </Button>
+                  {selectedApplication.resumeUrl && (
+                    <Button asChild>
+                      <a 
+                        href={selectedApplication.resumeUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        <FileText className="mr-2 h-4 w-4" />
+                        View Resume
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

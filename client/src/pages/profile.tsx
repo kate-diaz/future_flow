@@ -328,6 +328,7 @@ export default function ProfilePage() {
   const { user, refetchUser } = useAuth();
   const { toast } = useToast();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingName, setEditingName] = useState("");
   const [editingBio, setEditingBio] = useState("");
   const [editingGpa, setEditingGpa] = useState("");
   const [editingSubjects, setEditingSubjects] = useState("");
@@ -456,6 +457,7 @@ export default function ProfilePage() {
                       className="mt-4 w-full"
                       data-testid="button-edit-profile"
                       onClick={() => {
+                        setEditingName(user?.name || "");
                         setEditingBio(profile?.bio || "");
                         setEditingGpa(profile?.gpa?.toString() || "");
                         setEditingSubjects(profile?.subjectsTaken?.join(", ") || "");
@@ -469,10 +471,19 @@ export default function ProfilePage() {
                     <DialogHeader>
                       <DialogTitle>Edit Profile</DialogTitle>
                       <DialogDescription>
-                        Update your bio, GPA, and subjects taken
+                        Update your name, bio, GPA, and subjects taken
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="name">Name *</Label>
+                        <Input
+                          id="name"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          placeholder="Your full name"
+                        />
+                      </div>
                       <div>
                         <Label htmlFor="bio">Bio</Label>
                         <Textarea
@@ -520,6 +531,7 @@ export default function ProfilePage() {
                               : undefined;
                             
                             updateProfileMutation.mutate({
+                              name: editingName || undefined,
                               bio: editingBio || undefined,
                               gpa: gpaValue,
                               subjectsTaken: subjectsList,

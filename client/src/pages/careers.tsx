@@ -243,7 +243,9 @@ export default function CareersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCareer, setSelectedCareer] = useState<Career | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ title: "", description: "", industry: "", requiredSkills: "" });
+  const [editFormData, setEditFormData] = useState({ title: "", description: "", industry: "", requiredSkills: "" });
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
@@ -315,6 +317,29 @@ export default function CareersPage() {
     const skills = formData.requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
     createCareerMutation.mutate({
       ...formData,
+      requiredSkills: skills,
+    });
+  };
+
+  const editCareerMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PATCH", `/api/careers/${selectedCareer!.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/careers"] });
+      toast({ title: "Career updated successfully" });
+      setIsEditDialogOpen(false);
+      setSelectedCareer(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update career", variant: "destructive" });
+    },
+  });
+
+  const handleEditCareer = () => {
+    const skills = editFormData.requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+    editCareerMutation.mutate({
+      ...editFormData,
       requiredSkills: skills,
     });
   };
@@ -419,7 +444,16 @@ export default function CareersPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setSelectedCareer(career)}>
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedCareer(career);
+                                setEditFormData({
+                                  title: career.title,
+                                  description: career.description,
+                                  industry: career.industry || "",
+                                  requiredSkills: career.requiredSkills?.join(", ") || "",
+                                });
+                                setIsEditDialogOpen(true);
+                              }}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit
                               </DropdownMenuItem>
@@ -590,6 +624,66 @@ export default function CareersPage() {
                   disabled={!formData.title || !formData.description || createCareerMutation.isPending}
                 >
                   {createCareerMutation.isPending ? "Creating..." : "Create Career"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Career Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Career</DialogTitle>
+              <DialogDescription>Update the career pathway details</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-title">Title *</Label>
+                <Input
+                  id="edit-title"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="e.g., Software Engineer"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-industry">Industry</Label>
+                <Input
+                  id="edit-industry"
+                  value={editFormData.industry}
+                  onChange={(e) => setEditFormData({ ...editFormData, industry: e.target.value })}
+                  placeholder="e.g., Technology"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-description">Description *</Label>
+                <Textarea
+                  id="edit-description"
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Describe the career path..."
+                  rows={4}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-skills">Required Skills (comma-separated)</Label>
+                <Input
+                  id="edit-skills"
+                  value={editFormData.requiredSkills}
+                  onChange={(e) => setEditFormData({ ...editFormData, requiredSkills: e.target.value })}
+                  placeholder="e.g., Python, JavaScript, React"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEditCareer}
+                  disabled={!editFormData.title || !editFormData.description || editCareerMutation.isPending}
+                >
+                  {editCareerMutation.isPending ? "Updating..." : "Update Career"}
                 </Button>
               </div>
             </div>
