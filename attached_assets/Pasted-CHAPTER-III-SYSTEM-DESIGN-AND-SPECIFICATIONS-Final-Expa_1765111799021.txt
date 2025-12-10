@@ -1,0 +1,513 @@
+CHAPTER III: SYSTEM DESIGN AND SPECIFICATIONS
+(Final, Expanded, and Complete)
+
+A. System Features
+The Future Flow: Academic Alignment System provides an interconnected feature set intended to assist Computer Engineering students in aligning academic progress with professional development. It centralizes student data, career recommendations, learning resources, and progress tracking into one unified platform.
+
+NEXTJS + NEON DB
+
+1. User Authentication & Account Management
+Student registration (name, email, password, course year).
+
+
+Encrypted password storage using hashing.
+
+
+Account recovery via email verification.
+
+
+Role-based access control: Admin / Student.
+
+
+
+2. Student Profile Management
+Manage academic information:
+
+
+year level
+
+
+subjects taken
+
+
+GPA
+
+
+certifications
+
+
+Add personal info:
+
+
+skills
+
+
+interests
+
+
+career preferences
+
+
+Upload documents (resume, certificates, PDFs).
+
+
+Dashboard summary showing:
+
+
+skills count
+
+
+recommended careers
+
+
+overall progress
+
+
+
+3. Goal-Setting Module
+Create short-term goals (e.g., improve programming skills).
+
+
+Create long-term goals (e.g., become Embedded Systems Engineer).
+
+
+Goal progress visualization through charts.
+
+
+SMART-guided goal template (Specific, Measurable, Achievable, Relevant, Time-bound).
+
+
+
+4. Academic Alignment Module
+Profile-based course recommendations.
+
+
+Suggested training workshops and industry certifications.
+
+
+Skill gap identification vs industry-required competencies.
+
+
+Automatically generated learning roadmap.
+
+
+
+5. Career Pathway Mapping
+Career recommendations based on:
+
+
+skills
+
+
+interests
+
+
+courses taken
+
+
+academic performance
+
+
+Each career page includes:
+
+
+job overview
+
+
+required skills
+
+
+recommended tools/technologies
+
+
+sample learning plan and curriculum pathway
+
+
+
+6. Internship and Job Opportunities
+Internship listings from partner organizations.
+
+
+Filters for location, industry, and required skill sets.
+
+
+Save/bookmark opportunities.
+
+
+One-click redirection to application portals.
+
+
+
+7. Resource Library
+Downloadable study materials and technical PDFs.
+
+
+Skill modules (Python, C++, VLSI, Networking, etc.).
+
+
+Resume templates and career guide documents.
+
+
+Categorized search functionality.
+
+
+
+8. Progress Tracking Dashboard
+Skill progression visual charts (bar/line graphs).
+
+
+Goal achievement timelines.
+
+
+Completed academic modules vs required units.
+
+
+Personalized feedback messages based on progress patterns.
+
+
+
+9. Admin Features
+CRUD functionality for:
+
+
+internships
+
+
+training programs
+
+
+career pathways
+
+
+resource materials
+
+
+Admin dashboard with monitoring tools.
+
+
+Student analytics view (progress, skills distribution, usage logs).
+
+
+
+B. System Screens / UI Screens
+(Already complete — kept as-is but structured clearly for documentation)
+
+C. Technology Stack
+(Kept as provided — clean and final)
+
+D. UI Layouts (Wireframes)
+(Kept as provided — integrated into final documentation)
+
+E. Database Schema (Simplified)
+(Kept as provided — already complete)
+
+F. UI DESIGN PLAN (NEW SECTION)
+This section defines the overall look, feel, structure, and interaction style of the Future Flow System.
+
+1. Design Philosophy
+Future Flow follows a clean, modern, academic-tech aesthetic. The design goal is to feel:
+Professional but friendly
+
+
+Minimal but informative
+
+
+Structured but smooth
+
+
+The UI should empower students by presenting their academic journey clearly and visually, without overwhelming them.
+
+2. Layout System
+Global Layout Structure
+Left Sidebar Navigation (persistent)
+
+
+Dashboard
+
+
+Profile
+
+
+Goals
+
+
+Academic Alignment
+
+
+Careers
+
+
+Opportunities
+
+
+Resources
+
+
+Progress
+
+
+Top Header
+
+
+User profile dropdown
+
+
+Notifications
+
+
+Main Content Area
+
+
+Large, scrollable workspace for pages
+
+
+Right-side Quick Panel (optional)
+
+
+Suggested resources
+
+
+Quick actions
+
+
+Reminders
+
+
+Spacing & Alignment
+Standard padding: 24px
+
+
+Grid system: 12-column responsive grid
+
+
+Component corners: rounded-md → rounded-xl
+
+
+
+3. Components Style Guide
+Buttons
+Primary Button
+
+
+Yellow CTA
+
+
+(#FFD34E)
+
+
+Rounded, bold labels
+
+
+Secondary Button
+
+
+Orange border
+
+
+(#FFA135)
+
+
+Neutral Button
+
+
+Gray-light background
+
+
+Cards
+White background
+
+
+Soft brown border (#C6A487)
+
+
+Mild shadow for elevation
+
+
+Used heavily for:
+
+
+career recommendations
+
+
+goal cards
+
+
+resources
+
+
+analytics blocks
+
+
+Input Fields
+Round corners
+
+
+Clean gray borders
+
+
+Active state: yellow glow
+
+
+Charts
+Line charts → progress, skill growth
+
+
+Bar charts → skill distribution
+
+
+Donut charts → goal completion
+
+
+
+4. Interaction Design
+Smooth hover animations
+
+
+Modal pop-ups for editing profile, adding goals, uploading documents
+
+
+Toast messages for success/error notifications
+
+
+Auto-save for forms where possible
+
+
+
+5. Accessibility Considerations
+High color contrast mode toggle
+
+
+Alt text for images/documents
+
+
+Keyboard-navigable interface
+
+
+Scalable fonts (14–18px base)
+
+
+
+G. BRANDING PLAN (NEW SECTION)
+
+1. Brand Identity
+Brand Name: Future Flow
+ Tagline: “Your path, your future, your flow.”
+The branding represents growth, clarity, and direction — visually expressed through consistent color themes and purposeful typography.
+
+2. Color Palette
+Primary Colors
+Purpose
+Color
+Usage
+Background
+White (#FFFFFF)
+Clean, academic feel
+Accents
+Warm Brown (#B78656)
+Borders, dividers, card outlines
+Highlights
+Orange (#FF9C42)
+Chips, labels, section headers
+CTA
+Yellow (#FFD34E)
+Buttons & calls to action
+
+Secondary Colors
+Black (#1A1A1A) → text
+
+
+Dark gray (#3A3A3A) → headings
+
+
+Soft gray (#EFEFEF) → background panels
+
+
+Blue (#4285F4) → links and notifications
+
+
+
+3. Typography
+Font Pairing
+Primary Font: Poppins
+
+
+Secondary Font: Inter
+
+
+Style Usage
+Headings: semi-bold
+
+
+Body text: regular
+
+
+Labels: medium
+
+
+Numbers (for analytics): bold
+
+
+
+4. Iconography
+Rounded, modern flat icons
+
+
+Consistent line width
+
+
+Icons used for:
+
+
+navigation
+
+
+skills
+
+
+goals
+
+
+categories
+
+
+analytics
+
+
+
+5. Logo Guidelines
+Logo Variation
+Simple wordmark: FUTURE FLOW
+
+
+Symbol: a flow line forming an upward arrow
+
+
+Colors:
+
+
+brown for shape
+
+
+yellow for highlight
+
+
+
+6. Branding for Each Module
+Module
+Visual Style
+Dashboard
+Yellow highlights for quick stats
+Goals
+Progress bars in orange
+Academic Alignment
+Skill gaps shown in brown & yellow
+Careers
+Cards with icons + light shadows
+Opportunities
+Orange chips for skill tags
+Resources
+White cards with file-type icons
+Progress Tracking
+Multi-colored but consistent charts
+
+
