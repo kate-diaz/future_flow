@@ -199,21 +199,7 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
-  app.get("/api/opportunities/:id", async (req: Request, res: Response) => {
-    try {
-      const opportunity = await db.query.opportunities.findFirst({
-        where: eq(opportunities.id, req.params.id),
-      });
-      if (!opportunity) {
-        return res.status(404).json({ error: "Opportunity not found" });
-      }
-      res.json(opportunity);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch opportunity" });
-    }
-  });
-
-  // Get saved opportunities for current user
+  // Get saved opportunities for current user (MUST be before /:id route)
   app.get("/api/opportunities/saved", requireAuth, async (req: Request, res: Response) => {
     try {
       const saved = await db.query.savedOpportunities.findMany({
@@ -225,6 +211,33 @@ export function registerRoutes(app: express.Application) {
       res.json(saved.map(s => s.opportunity));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch saved opportunities" });
+    }
+  });
+
+  app.get("/api/opportunities/:id", async (req: Request, res: Response) => {
+    try {
+      const latest = await db.query.opportunities.findMany({
+        where: eq(opportunities.isActive, true),
+        orderBy: desc(opportunities.createdAt),
+        limit: 3,
+      });
+      res.json(latest);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch opportunities" });
+    }
+  });
+
+  app.get("/api/opportunities/:id", async (req: Request, res: Response) => {
+    try {
+      const opportunity = await db.query.opportunities.findFirst({
+        where: eq(opportunities.id, req.params.id),
+      });
+      if (!opportunity) {
+        return res.status(404).json({ error: "Opportunity not found" });
+      }
+      res.json(opportunity);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch opportunity" });
     }
   });
 
@@ -314,6 +327,16 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
+  // Increment resource download count
+  app.post("/api/resources/:id/download", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.incrementResourceDownload(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to track download" });
+    }
+  });
+
   // ========== TRAINING PROGRAMS CRUD ==========
   app.get("/api/training-programs", async (req: Request, res: Response) => {
     try {
@@ -367,6 +390,57 @@ export function registerRoutes(app: express.Application) {
       res.json({ message: "Training program deleted" });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete training program" });
+    }
+  });
+
+  // ========== ACADEMIC MODULES CRUD (Student-specific) ==========
+  app.get("/api/academic-modules", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const modules = await db.query.academicModules.findMany({
+        where: eq(academicModules.userId, req.session.userId!),
+      });
+      res.json(modules);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch academic modules" });
+    }
+  });
+
+  app.post("/api/academic-modules", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [module] = await db.insert(academicModules).values({
+        ...req.body,
+        userId: req.session.userId,
+      }).returning();
+      res.json(module);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create academic module" });
+    }
+  });
+
+  app.put("/api/academic-modules/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [module] = await db.update(academicModules)
+        .set(req.body)
+        .where(and(
+          eq(academicModules.id, req.params.id),
+          eq(academicModules.userId, req.session.userId!)
+        ))
+        .returning();
+      res.json(module);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update academic module" });
+    }
+  });
+
+  app.delete("/api/academic-modules/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await db.delete(academicModules).where(and(
+        eq(academicModules.id, req.params.id),
+        eq(academicModules.userId, req.session.userId!)
+      ));
+      res.json({ message: "Academic module deleted" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete academic module" });
     }
   });
 

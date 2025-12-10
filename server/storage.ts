@@ -121,6 +121,7 @@ export interface IStorage {
     totalGoals: number;
     totalOpportunities: number;
     totalResources: number;
+    totalCareers: number;
   }>;
 }
 
@@ -514,6 +515,7 @@ export class DatabaseStorage implements IStorage {
     totalGoals: number;
     totalOpportunities: number;
     totalResources: number;
+    totalCareers: number;
   }> {
     const [usersResult] = await db
       .select({ count: sql<number>`count(*)` })
@@ -522,12 +524,14 @@ export class DatabaseStorage implements IStorage {
     const [goalsResult] = await db.select({ count: sql<number>`count(*)` }).from(goals);
     const [opportunitiesResult] = await db.select({ count: sql<number>`count(*)` }).from(opportunities);
     const [resourcesResult] = await db.select({ count: sql<number>`count(*)` }).from(resources);
+    const [careersResult] = await db.select({ count: sql<number>`count(*)` }).from(careers);
     
     return {
       totalUsers: Number(usersResult.count),
       totalGoals: Number(goalsResult.count),
       totalOpportunities: Number(opportunitiesResult.count),
       totalResources: Number(resourcesResult.count),
+      totalCareers: Number(careersResult.count),
     };
   }
 }
