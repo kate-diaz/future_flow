@@ -86,6 +86,18 @@ export const savedOpportunities = pgTable("saved_opportunities", {
   savedAt: timestamp("saved_at").defaultNow(),
 });
 
+// Opportunity applications (student requests)
+export const opportunityApplications = pgTable("opportunity_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  opportunityId: varchar("opportunity_id").notNull().references(() => opportunities.id),
+  profilePictureUrl: text("profile_picture_url"),
+  resumeUrl: text("resume_url").notNull(),
+  coverLetter: text("cover_letter"),
+  status: text("status").default("pending"), // 'pending' | 'reviewed' | 'accepted' | 'rejected'
+  appliedAt: timestamp("applied_at").defaultNow(),
+});
+
 // Resources library
 export const resources = pgTable("resources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -154,6 +166,11 @@ export const savedOpportunitiesRelations = relations(savedOpportunities, ({ one 
   opportunity: one(opportunities, { fields: [savedOpportunities.opportunityId], references: [opportunities.id] }),
 }));
 
+export const opportunityApplicationsRelations = relations(opportunityApplications, ({ one }) => ({
+  user: one(users, { fields: [opportunityApplications.userId], references: [users.id] }),
+  opportunity: one(opportunities, { fields: [opportunityApplications.opportunityId], references: [opportunities.id] }),
+}));
+
 export const progressRecordsRelations = relations(progressRecords, ({ one }) => ({
   user: one(users, { fields: [progressRecords.userId], references: [users.id] }),
 }));
@@ -169,6 +186,7 @@ export const insertGoalSchema = createInsertSchema(goals).omit({ id: true, creat
 export const insertCareerSchema = createInsertSchema(careers).omit({ id: true });
 export const insertOpportunitySchema = createInsertSchema(opportunities).omit({ id: true, createdAt: true });
 export const insertSavedOpportunitySchema = createInsertSchema(savedOpportunities).omit({ id: true, savedAt: true });
+export const insertOpportunityApplicationSchema = createInsertSchema(opportunityApplications).omit({ id: true, appliedAt: true });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true, downloadCount: true });
 export const insertProgressRecordSchema = createInsertSchema(progressRecords).omit({ id: true, recordedAt: true });
 export const insertAcademicModuleSchema = createInsertSchema(academicModules).omit({ id: true });
@@ -187,6 +205,8 @@ export type Opportunity = typeof opportunities.$inferSelect;
 export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
 export type SavedOpportunity = typeof savedOpportunities.$inferSelect;
 export type InsertSavedOpportunity = z.infer<typeof insertSavedOpportunitySchema>;
+export type OpportunityApplication = typeof opportunityApplications.$inferSelect;
+export type InsertOpportunityApplication = z.infer<typeof insertOpportunityApplicationSchema>;
 export type Resource = typeof resources.$inferSelect;
 export type InsertResource = z.infer<typeof insertResourceSchema>;
 export type ProgressRecord = typeof progressRecords.$inferSelect;

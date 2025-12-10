@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { 
   users, careers, opportunities, goals, resources, trainingPrograms,
-  profiles, savedOpportunities, progressRecords, academicModules 
+  profiles, savedOpportunities, progressRecords, academicModules, opportunityApplications
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { storage } from "./storage";
@@ -186,6 +186,7 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
+  // All specific routes MUST come before /:id route
   app.get("/api/opportunities/latest", async (req: Request, res: Response) => {
     try {
       const latest = await db.query.opportunities.findMany({
@@ -199,7 +200,7 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
-  // Get saved opportunities for current user (MUST be before /:id route)
+  // Get saved opportunities for current user
   app.get("/api/opportunities/saved", requireAuth, async (req: Request, res: Response) => {
     try {
       const saved = await db.query.savedOpportunities.findMany({
@@ -210,23 +211,29 @@ export function registerRoutes(app: express.Application) {
       });
       res.json(saved.map(s => s.opportunity));
     } catch (error) {
+      console.error("Error fetching saved opportunities:", error);
       res.status(500).json({ error: "Failed to fetch saved opportunities" });
     }
   });
 
-  app.get("/api/opportunities/:id", async (req: Request, res: Response) => {
+  // Get user's applications (separate endpoint to avoid route conflicts)
+  app.get("/api/opportunity-applications/mine", requireAuth, async (req: Request, res: Response) => {
     try {
-      const latest = await db.query.opportunities.findMany({
-        where: eq(opportunities.isActive, true),
-        orderBy: desc(opportunities.createdAt),
-        limit: 3,
+      const applications = await db.query.opportunityApplications.findMany({
+        where: eq(opportunityApplications.userId, req.session.userId!),
+        with: {
+          opportunity: true,
+        },
+        orderBy: desc(opportunityApplications.appliedAt),
       });
-      res.json(latest);
+      res.json(applications);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch opportunities" });
+      console.error("Error fetching applications:", error);
+      res.status(500).json({ error: "Failed to fetch applications" });
     }
   });
 
+  // Now the :id route - this catches everything else
   app.get("/api/opportunities/:id", async (req: Request, res: Response) => {
     try {
       const opportunity = await db.query.opportunities.findFirst({
@@ -268,6 +275,78 @@ export function registerRoutes(app: express.Application) {
       res.json({ message: "Opportunity deleted" });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete opportunity" });
+    }
+  });
+
+  // Save/unsave opportunity
+  app.post("/api/opportunities/:id/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Check if already saved
+      const existing = await db.query.savedOpportunities.findFirst({
+        where: and(
+          eq(savedOpportunities.userId, req.session.userId!),
+          eq(savedOpportunities.opportunityId, req.params.id)
+        ),
+      });
+
+      if (existing) {
+        return res.status(400).json({ error: "Already saved" });
+      }
+
+      const [saved] = await db.insert(savedOpportunities).values({
+        userId: req.session.userId!,
+        opportunityId: req.params.id,
+      }).returning();
+
+      res.json(saved);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save opportunity" });
+    }
+  });
+
+  app.delete("/api/opportunities/:id/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await db.delete(savedOpportunities)
+        .where(and(
+          eq(savedOpportunities.userId, req.session.userId!),
+          eq(savedOpportunities.opportunityId, req.params.id)
+        ));
+      res.json({ message: "Removed from saved" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove from saved" });
+    }
+  });
+
+  // Apply for opportunity
+  app.post("/api/opportunities/:id/apply", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { profilePictureUrl, resumeUrl, coverLetter } = req.body;
+
+      // Check if already applied
+      const existing = await db.query.opportunityApplications.findFirst({
+        where: and(
+          eq(opportunityApplications.userId, req.session.userId!),
+          eq(opportunityApplications.opportunityId, req.params.id)
+        ),
+      });
+
+      if (existing) {
+        return res.status(400).json({ error: "You have already applied to this opportunity" });
+      }
+
+      const [application] = await db.insert(opportunityApplications).values({
+        userId: req.session.userId!,
+        opportunityId: req.params.id,
+        profilePictureUrl,
+        resumeUrl,
+        coverLetter,
+        status: "pending",
+      }).returning();
+
+      res.json(application);
+    } catch (error) {
+      console.error("Application error:", error);
+      res.status(500).json({ error: "Failed to submit application" });
     }
   });
 

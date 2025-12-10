@@ -32,17 +32,24 @@ import {
   Edit,
   Trash2,
   Plus,
+  Upload,
+  CheckCircle2,
+  FileText,
+  Send,
+  X,
 } from "lucide-react";
-import type { Opportunity, SavedOpportunity } from "@shared/schema";
+import type { Opportunity, SavedOpportunity, OpportunityApplication } from "@shared/schema";
 
 function OpportunityCard({
   opportunity,
   isSaved,
   onToggleSave,
+  onApply,
 }: {
   opportunity: Opportunity;
   isSaved: boolean;
   onToggleSave: () => void;
+  onApply: () => void;
 }) {
   const isInternship = opportunity.type === "internship";
 
@@ -128,19 +135,10 @@ function OpportunityCard({
         )}
 
         <div className="mt-4 flex justify-end">
-          {opportunity.applicationUrl && (
-            <Button asChild>
-              <a
-                href={opportunity.applicationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid={`button-apply-${opportunity.id}`}
-              >
-                Apply Now
-                <ExternalLink className="ml-2 h-4 w-4" />
-              </a>
-            </Button>
-          )}
+          <Button onClick={onApply} data-testid={`button-apply-${opportunity.id}`}>
+            <Send className="mr-2 h-4 w-4" />
+            Apply Now
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -156,6 +154,9 @@ export default function OpportunitiesPage() {
   const [filterLocation, setFilterLocation] = useState<string>("all-locations");
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
+  const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [formData, setFormData] = useState({ 
     title: "", 
     company: "", 
@@ -165,16 +166,99 @@ export default function OpportunitiesPage() {
     industry: "",
     applicationUrl: ""
   });
+  const [applicationData, setApplicationData] = useState({
+    profilePictureUrl: "",
+    resumeUrl: "",
+    coverLetter: "",
+  });
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // Helper function to compress and convert image to base64
+  const handleImageUpload = async (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Calculate new dimensions (max 400x400)
+          let width = img.width;
+          let height = img.height;
+          const maxSize = 400;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height *= maxSize / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width *= maxSize / height;
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Convert to base64 with compression
+          const base64 = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(base64);
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleProfilePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Please select an image file", variant: "destructive" });
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Image size should be less than 5MB", variant: "destructive" });
+      return;
+    }
+    
+    try {
+      setIsUploadingImage(true);
+      const base64 = await handleImageUpload(file);
+      setApplicationData({ ...applicationData, profilePictureUrl: base64 });
+      toast({ title: "Image uploaded successfully" });
+    } catch (error) {
+      toast({ title: "Failed to upload image", variant: "destructive" });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const { data: opportunities, isLoading } = useQuery<Opportunity[]>({
     queryKey: ["/api/opportunities"],
   });
 
-  const { data: savedOpportunities } = useQuery<SavedOpportunity[]>({
-    queryKey: ["/api/opportunities", "saved"],
+  const { data: savedOpportunities } = useQuery<Opportunity[]>({
+    queryKey: ["/api/opportunities/saved"],
+    enabled: !!user && !isAdmin,
   });
 
-  const savedIds = new Set(savedOpportunities?.map((s) => s.opportunityId) || []);
+  const { data: applications } = useQuery<OpportunityApplication[]>({
+    queryKey: ["/api/opportunity-applications/mine"],
+    enabled: !!user && !isAdmin,
+  });
+
+  const savedIds = new Set(savedOpportunities?.map((s) => s.id) || []);
+  const appliedIds = new Set(applications?.map((a) => a.opportunityId) || []);
 
   const toggleSaveMutation = useMutation({
     mutationFn: async ({ opportunityId, isSaved }: { opportunityId: string; isSaved: boolean }) => {
@@ -185,7 +269,7 @@ export default function OpportunitiesPage() {
       }
     },
     onSuccess: (_, { isSaved }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/opportunities", "saved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities/saved"] });
       toast({
         title: isSaved ? "Removed from saved" : "Saved successfully",
         description: isSaved ? "Opportunity removed from your bookmarks" : "Opportunity added to your bookmarks",
@@ -224,6 +308,47 @@ export default function OpportunitiesPage() {
     },
   });
 
+  const applyMutation = useMutation({
+    mutationFn: async ({ opportunityId, data }: { opportunityId: string; data: any }) => {
+      await apiRequest("POST", `/api/opportunities/${opportunityId}/apply`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunity-applications/mine"] });
+      setIsApplyDialogOpen(false);
+      setIsSuccessDialogOpen(true);
+      setApplicationData({ profilePictureUrl: "", resumeUrl: "", coverLetter: "" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to submit application", 
+        description: error.message || "You may have already applied to this opportunity",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleApplyClick = (opportunity: Opportunity) => {
+    setSelectedOpportunity(opportunity);
+    setApplicationData({ profilePictureUrl: "", resumeUrl: "", coverLetter: "" });
+    setIsApplyDialogOpen(true);
+  };
+
+  const handleSubmitApplication = () => {
+    if (!selectedOpportunity) return;
+    if (!applicationData.resumeUrl) {
+      toast({ title: "Resume URL is required", variant: "destructive" });
+      return;
+    }
+    applyMutation.mutate({
+      opportunityId: selectedOpportunity.id,
+      data: applicationData,
+    });
+  };
+
+  const handleClearProfilePicture = () => {
+    setApplicationData({ ...applicationData, profilePictureUrl: "" });
+  };
+
   const locations = [...new Set(opportunities?.map((o) => o.location).filter(Boolean) || [])];
 
   const filteredOpportunities = opportunities?.filter((opp) => {
@@ -237,6 +362,10 @@ export default function OpportunitiesPage() {
 
     if (activeTab === "saved") {
       return matchesSearch && matchesType && matchesLocation && savedIds.has(opp.id);
+    }
+
+    if (activeTab === "requests") {
+      return matchesSearch && matchesType && matchesLocation && appliedIds.has(opp.id);
     }
 
     return matchesSearch && matchesType && matchesLocation;
@@ -335,6 +464,10 @@ export default function OpportunitiesPage() {
                 <TabsTrigger value="saved" data-testid="tab-saved-opportunities">
                   <Bookmark className="mr-1.5 h-4 w-4" />
                   Saved ({savedIds.size})
+                </TabsTrigger>
+                <TabsTrigger value="requests" data-testid="tab-requests">
+                  <Send className="mr-1.5 h-4 w-4" />
+                  Requests ({appliedIds.size})
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -441,6 +574,7 @@ export default function OpportunitiesPage() {
                       isSaved: savedIds.has(opportunity.id),
                     })
                   }
+                  onApply={() => handleApplyClick(opportunity)}
                 />
               ))}
             </div>
@@ -450,16 +584,24 @@ export default function OpportunitiesPage() {
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
                   {activeTab === "saved" ? (
                     <Bookmark className="h-8 w-8 text-muted-foreground" />
+                  ) : activeTab === "requests" ? (
+                    <Send className="h-8 w-8 text-muted-foreground" />
                   ) : (
                     <Building2 className="h-8 w-8 text-muted-foreground" />
                   )}
                 </div>
                 <h3 className="mt-4 font-display text-lg font-semibold">
-                  {activeTab === "saved" ? "No saved opportunities" : "No opportunities found"}
+                  {activeTab === "saved" 
+                    ? "No saved opportunities" 
+                    : activeTab === "requests"
+                    ? "No applications yet"
+                    : "No opportunities found"}
                 </h3>
                 <p className="mt-2 text-muted-foreground max-w-sm">
                   {activeTab === "saved"
                     ? "Save opportunities by clicking the bookmark icon"
+                    : activeTab === "requests"
+                    ? "Apply to opportunities to see your requests here"
                     : searchQuery
                     ? "Try adjusting your search or filters"
                     : "New opportunities will appear here as they are posted"}
@@ -559,6 +701,120 @@ export default function OpportunitiesPage() {
                   {createOpportunityMutation.isPending ? "Creating..." : "Create Opportunity"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Application Dialog */}
+        <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Apply for {selectedOpportunity?.title}</DialogTitle>
+              <DialogDescription>
+                Submit your application for this opportunity at {selectedOpportunity?.company}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="profilePictureUrl">Profile Picture (Optional)</Label>
+                <div className="flex gap-3 mt-2">
+                  {applicationData.profilePictureUrl && (
+                    <div className="relative flex h-20 w-20 items-center justify-center rounded-lg border bg-muted overflow-hidden">
+                      <img 
+                        src={applicationData.profilePictureUrl} 
+                        alt="Profile preview" 
+                        className="h-full w-full object-cover"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                        onClick={handleClearProfilePicture}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <Input
+                      id="profilePictureFile"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePictureChange}
+                      className="cursor-pointer"
+                      disabled={isUploadingImage}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {isUploadingImage ? "Uploading and compressing..." : "Upload an image (max 5MB). Will be compressed automatically."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="resumeUrl">Resume URL *</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    id="resumeUrl"
+                    value={applicationData.resumeUrl}
+                    onChange={(e) => setApplicationData({ ...applicationData, resumeUrl: e.target.value })}
+                    placeholder="https://drive.google.com/your-resume.pdf"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Paste a URL to your resume (Google Drive, Dropbox, etc.)</p>
+              </div>
+
+              <div>
+                <Label htmlFor="coverLetter">Cover Letter (Optional)</Label>
+                <Textarea
+                  id="coverLetter"
+                  value={applicationData.coverLetter}
+                  onChange={(e) => setApplicationData({ ...applicationData, coverLetter: e.target.value })}
+                  placeholder="Tell us why you're interested in this opportunity..."
+                  rows={5}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setIsApplyDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSubmitApplication}
+                  disabled={!applicationData.resumeUrl || applyMutation.isPending}
+                >
+                  {applyMutation.isPending ? "Submitting..." : "Submit Application"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Success Dialog */}
+        <Dialog open={isSuccessDialogOpen} onOpenChange={setIsSuccessDialogOpen}>
+          <DialogContent className="max-w-md">
+            <div className="flex flex-col items-center text-center py-6">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+                <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+              </div>
+              <DialogHeader className="mt-4">
+                <DialogTitle className="text-2xl">Request Sent!</DialogTitle>
+                <DialogDescription className="mt-2">
+                  Your application has been successfully submitted to {selectedOpportunity?.company}.
+                  You can track your application status in the Requests tab.
+                </DialogDescription>
+              </DialogHeader>
+              <Button 
+                onClick={() => {
+                  setIsSuccessDialogOpen(false);
+                  setActiveTab("requests");
+                }}
+                className="mt-6"
+              >
+                View My Requests
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
