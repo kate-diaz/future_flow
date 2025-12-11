@@ -213,7 +213,8 @@ export default function OpportunitiesPage() {
     type: "internship", 
     location: "", 
     industry: "",
-    applicationUrl: ""
+    applicationUrl: "",
+    deadline: ""
   });
   const [editFormData, setEditFormData] = useState({ 
     title: "", 
@@ -222,7 +223,8 @@ export default function OpportunitiesPage() {
     type: "internship", 
     location: "", 
     industry: "",
-    applicationUrl: ""
+    applicationUrl: "",
+    deadline: ""
   });
   const [applicationData, setApplicationData] = useState({
     profilePictureUrl: "",
@@ -359,7 +361,7 @@ export default function OpportunitiesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/opportunities"] });
       toast({ title: "Opportunity created successfully" });
       setIsCreateDialogOpen(false);
-      setFormData({ title: "", company: "", description: "", type: "internship", location: "", industry: "", applicationUrl: "" });
+      setFormData({ title: "", company: "", description: "", type: "internship", location: "", industry: "", applicationUrl: "", deadline: "" });
     },
     onError: () => {
       toast({ title: "Failed to create opportunity", variant: "destructive" });
@@ -617,6 +619,7 @@ export default function OpportunitiesPage() {
                                   location: opp.location || "",
                                   industry: opp.industry || "",
                                   applicationUrl: opp.applicationUrl || "",
+                                  deadline: opp.deadline ? new Date(opp.deadline).toISOString().slice(0,10) : "",
                                 });
                                 setIsEditDialogOpen(true);
                               }}>
@@ -798,6 +801,17 @@ export default function OpportunitiesPage() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="deadline">Deadline</Label>
+                  <Input
+                    id="deadline"
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                  />
+                </div>
+              </div>
               <div>
                 <Label htmlFor="industry">Industry</Label>
                 <Input
@@ -831,7 +845,13 @@ export default function OpportunitiesPage() {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={() => createOpportunityMutation.mutate(formData)}
+                  onClick={() => {
+                    const payload = {
+                      ...formData,
+                      deadline: formData.deadline ? new Date(formData.deadline) : undefined,
+                    };
+                    createOpportunityMutation.mutate(payload);
+                  }}
                   disabled={!formData.title || !formData.company || !formData.description || createOpportunityMutation.isPending}
                 >
                   {createOpportunityMutation.isPending ? "Creating..." : "Create Opportunity"}
@@ -890,6 +910,17 @@ export default function OpportunitiesPage() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-deadline">Deadline</Label>
+                  <Input
+                    id="edit-deadline"
+                    type="date"
+                    value={editFormData.deadline}
+                    onChange={(e) => setEditFormData({ ...editFormData, deadline: e.target.value })}
+                  />
+                </div>
+              </div>
               <div>
                 <Label htmlFor="edit-industry">Industry</Label>
                 <Input
@@ -923,7 +954,13 @@ export default function OpportunitiesPage() {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={handleEditOpportunity}
+                  onClick={() => {
+                    const payload = {
+                      ...editFormData,
+                      deadline: editFormData.deadline ? new Date(editFormData.deadline) : undefined,
+                    };
+                    editOpportunityMutation.mutate(payload);
+                  }}
                   disabled={!editFormData.title || !editFormData.company || !editFormData.description || editOpportunityMutation.isPending}
                 >
                   {editOpportunityMutation.isPending ? "Updating..." : "Update Opportunity"}

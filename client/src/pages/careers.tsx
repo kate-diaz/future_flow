@@ -40,6 +40,13 @@ import {
 } from "lucide-react";
 import type { Career } from "@shared/schema";
 
+function formatPeso(amount: string | number | null | undefined) {
+  if (amount === null || amount === undefined || amount === "") return null;
+  const num = typeof amount === "number" ? amount : parseInt(String(amount).replace(/[^0-9]/g, ""), 10);
+  if (isNaN(num)) return null;
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(num);
+}
+
 const careerIcons: Record<string, React.ElementType> = {
   software: Code2,
   hardware: Cpu,
@@ -104,7 +111,7 @@ function CareerCard({
             {career.salaryRange && (
               <div className="mt-3 flex items-center gap-1 text-sm text-muted-foreground">
                 <DollarSign className="h-3.5 w-3.5" />
-                <span>{career.salaryRange}</span>
+                <span>₱{formatPeso(career.salaryRange) ?? career.salaryRange}</span>
               </div>
             )}
           </div>
@@ -152,7 +159,7 @@ function CareerDetail({ career, onClose, onAddToGoals, isAdmin }: { career: Care
               <DollarSign className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-sm font-medium">Salary Range</p>
-                <p className="text-lg font-bold text-primary">{career.salaryRange}</p>
+                <p className="text-lg font-bold text-primary">₱{formatPeso(career.salaryRange) ?? career.salaryRange}</p>
               </div>
             </div>
           )}
@@ -244,8 +251,8 @@ export default function CareersPage() {
   const [selectedCareer, setSelectedCareer] = useState<Career | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ title: "", description: "", industry: "", requiredSkills: "" });
-  const [editFormData, setEditFormData] = useState({ title: "", description: "", industry: "", requiredSkills: "" });
+  const [formData, setFormData] = useState({ title: "", description: "", industry: "", overview: "", salaryRange: "", requiredSkills: "", recommendedTools: "" });
+  const [editFormData, setEditFormData] = useState({ title: "", description: "", industry: "", overview: "", salaryRange: "", requiredSkills: "", recommendedTools: "" });
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
@@ -266,7 +273,7 @@ export default function CareersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/careers"] });
       toast({ title: "Career created successfully" });
       setIsCreateDialogOpen(false);
-      setFormData({ title: "", description: "", industry: "", requiredSkills: "" });
+      setFormData({ title: "", description: "", industry: "", overview: "", salaryRange: "", requiredSkills: "", recommendedTools: "" });
     },
     onError: () => {
       toast({ title: "Failed to create career", variant: "destructive" });
@@ -315,9 +322,15 @@ export default function CareersPage() {
 
   const handleCreateCareer = () => {
     const skills = formData.requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+    const tools = formData.recommendedTools.split(',').map(t => t.trim()).filter(Boolean);
     createCareerMutation.mutate({
-      ...formData,
+      title: formData.title,
+      description: formData.description,
+      industry: formData.industry || undefined,
+      overview: formData.overview || undefined,
+      salaryRange: formData.salaryRange || undefined,
       requiredSkills: skills,
+      recommendedTools: tools,
     });
   };
 
@@ -338,9 +351,15 @@ export default function CareersPage() {
 
   const handleEditCareer = () => {
     const skills = editFormData.requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+    const tools = editFormData.recommendedTools.split(',').map(t => t.trim()).filter(Boolean);
     editCareerMutation.mutate({
-      ...editFormData,
+      title: editFormData.title,
+      description: editFormData.description,
+      industry: editFormData.industry || undefined,
+      overview: editFormData.overview || undefined,
+      salaryRange: editFormData.salaryRange || undefined,
       requiredSkills: skills,
+      recommendedTools: tools,
     });
   };
 
@@ -450,7 +469,10 @@ export default function CareersPage() {
                                   title: career.title,
                                   description: career.description,
                                   industry: career.industry || "",
+                                  overview: career.overview || "",
+                                  salaryRange: career.salaryRange || "",
                                   requiredSkills: career.requiredSkills?.join(", ") || "",
+                                  recommendedTools: career.recommendedTools?.join(", ") || "",
                                 });
                                 setIsEditDialogOpen(true);
                               }}>
@@ -597,6 +619,16 @@ export default function CareersPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="overview">Overview</Label>
+                <Textarea
+                  id="overview"
+                  value={formData.overview}
+                  onChange={(e) => setFormData({ ...formData, overview: e.target.value })}
+                  placeholder="High-level overview of the role..."
+                  rows={3}
+                />
+              </div>
+              <div>
                 <Label htmlFor="description">Description *</Label>
                 <Textarea
                   id="description"
@@ -607,12 +639,36 @@ export default function CareersPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="salary">Salary (₱, integer)</Label>
+                <Input
+                  id="salary"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={formData.salaryRange}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    setFormData({ ...formData, salaryRange: v });
+                  }}
+                  placeholder="e.g., 85000"
+                />
+              </div>
+              <div>
                 <Label htmlFor="skills">Required Skills (comma-separated)</Label>
                 <Input
                   id="skills"
                   value={formData.requiredSkills}
                   onChange={(e) => setFormData({ ...formData, requiredSkills: e.target.value })}
                   placeholder="e.g., Python, JavaScript, React"
+                />
+              </div>
+              <div>
+                <Label htmlFor="tools">Recommended Tools & Technologies (comma-separated)</Label>
+                <Input
+                  id="tools"
+                  value={formData.recommendedTools}
+                  onChange={(e) => setFormData({ ...formData, recommendedTools: e.target.value })}
+                  placeholder="e.g., Jupyter, scikit-learn, PyTorch, Tableau"
                 />
               </div>
               <div className="flex justify-end gap-2">
@@ -657,6 +713,16 @@ export default function CareersPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="edit-overview">Overview</Label>
+                <Textarea
+                  id="edit-overview"
+                  value={editFormData.overview}
+                  onChange={(e) => setEditFormData({ ...editFormData, overview: e.target.value })}
+                  placeholder="High-level overview of the role..."
+                  rows={3}
+                />
+              </div>
+              <div>
                 <Label htmlFor="edit-description">Description *</Label>
                 <Textarea
                   id="edit-description"
@@ -667,12 +733,36 @@ export default function CareersPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="edit-salary">Salary (₱, integer)</Label>
+                <Input
+                  id="edit-salary"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={editFormData.salaryRange}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    setEditFormData({ ...editFormData, salaryRange: v });
+                  }}
+                  placeholder="e.g., 165000"
+                />
+              </div>
+              <div>
                 <Label htmlFor="edit-skills">Required Skills (comma-separated)</Label>
                 <Input
                   id="edit-skills"
                   value={editFormData.requiredSkills}
                   onChange={(e) => setEditFormData({ ...editFormData, requiredSkills: e.target.value })}
                   placeholder="e.g., Python, JavaScript, React"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-tools">Recommended Tools & Technologies (comma-separated)</Label>
+                <Input
+                  id="edit-tools"
+                  value={editFormData.recommendedTools}
+                  onChange={(e) => setEditFormData({ ...editFormData, recommendedTools: e.target.value })}
+                  placeholder="e.g., Jupyter, scikit-learn, PyTorch, Tableau"
                 />
               </div>
               <div className="flex justify-end gap-2">
