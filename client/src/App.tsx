@@ -80,8 +80,8 @@ function Router() {
     <Switch>
       <Route path="/" component={() => {
         if (!user) return <Redirect to="/auth" />;
-        // Route based on role: admin goes to admin panel by default, student to dashboard
-        return user.role === "admin" ? <Redirect to="/admin" /> : <ProtectedRoute component={DashboardPage} />;
+        // Route based on role: admin goes to admin panel by default, student to profile
+        return user.role === "admin" ? <Redirect to="/admin" /> : <Redirect to="/profile" />;
       }} />
       <Route path="/auth" component={() => <PublicRoute component={AuthPage} />} />
       {/* Admin has access to everything */}

@@ -140,7 +140,12 @@ function ResourceCard({
             {resource.downloadCount || 0} downloads
           </span>
           <Button onClick={onDownload} data-testid={`button-download-${resource.id}`}>
-            {resource.type === "article" ? (
+            {resource.type === "video" ? (
+              <>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Resource
+              </>
+            ) : resource.type === "article" ? (
               <>
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Open
@@ -175,6 +180,9 @@ export default function ResourcesPage() {
     tags: ""
   });
   const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingResource, setEditingResource] = useState<Resource | null>(null);
+  const [editUrl, setEditUrl] = useState("");
 
   const { data: resources, isLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -217,20 +225,59 @@ export default function ResourcesPage() {
     },
   });
 
+  const updateResourceMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      await apiRequest("PATCH", `/api/resources/${id}`, data);
+    },
+    onSuccess: (_data, variables) => {
+      // Optimistically update cache so UI reflects new URL immediately
+      queryClient.setQueryData<Resource[] | null>(["/api/resources"], (old) => {
+        if (!old) return old;
+        return old.map((r) => (r.id === variables.id ? { ...r, ...variables.data } : r));
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      toast({ title: "Resource updated successfully" });
+      setIsEditDialogOpen(false);
+      setEditingResource(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update resource", variant: "destructive" });
+    },
+  });
+
   const handleDownload = (resource: Resource) => {
-    if (!isAdmin) {
-      setIsComingSoonOpen(true);
+    // Videos and articles: open the URL directly, no modal
+    if (resource.type === "video" || resource.type === "article") {
+      if (resource.url) {
+        window.open(resource.url, "_blank");
+      }
+      // Optionally track views as downloads
+      downloadMutation.mutate(resource.id);
       return;
     }
 
-    downloadMutation.mutate(resource.id);
+    // PDFs: require admin to download, non-admin sees modal
+    if (resource.type === "pdf") {
+      if (!isAdmin) {
+        setIsComingSoonOpen(true);
+        return;
+      }
+      downloadMutation.mutate(resource.id);
+      if (resource.url) {
+        window.open(resource.url, "_blank");
+      }
+      toast({
+        title: "Download started",
+        description: `${resource.title} is being downloaded`,
+      });
+      return;
+    }
+
+    // Fallback for other types: open if URL exists
     if (resource.url) {
       window.open(resource.url, "_blank");
     }
-    toast({
-      title: "Download started",
-      description: `${resource.title} is being downloaded`,
-    });
+    downloadMutation.mutate(resource.id);
   };
 
   const filteredResources = resources?.filter((resource) => {
@@ -382,9 +429,13 @@ export default function ResourcesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setViewMode("grid") /* placeholder for edit */}>
+                              <DropdownMenuItem onClick={() => {
+                                setEditingResource(resource);
+                                setEditUrl(resource.url || "");
+                                setIsEditDialogOpen(true);
+                              }}>
                                 <Edit className="mr-2 h-4 w-4" />
-                                Edit (coming soon)
+                                Edit URL
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -568,6 +619,56 @@ export default function ResourcesPage() {
                   disabled={!formData.title || !formData.url || createResourceMutation.isPending}
                 >
                   {createResourceMutation.isPending ? "Creating..." : "Create Resource"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Resource Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Video URL</DialogTitle>
+              <DialogDescription>Update the URL for {editingResource?.title}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-url">Resource URL *</Label>
+                <Input
+                  id="edit-url"
+                  value={editUrl}
+                  onChange={(e) => setEditUrl(e.target.value)}
+                  placeholder="https://..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && editingResource) {
+                      updateResourceMutation.mutate({
+                        id: editingResource.id,
+                        data: { url: editUrl }
+                      });
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingResource(null);
+                }}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (editingResource && editUrl) {
+                      updateResourceMutation.mutate({
+                        id: editingResource.id,
+                        data: { url: editUrl }
+                      });
+                    }
+                  }}
+                  disabled={updateResourceMutation.isPending}
+                >
+                  {updateResourceMutation.isPending ? "Updating..." : "Update URL"}
                 </Button>
               </div>
             </div>

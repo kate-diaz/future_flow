@@ -421,6 +421,18 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
+  app.patch("/api/resources/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [resource] = await db.update(resources)
+        .set(req.body)
+        .where(eq(resources.id, req.params.id))
+        .returning();
+      res.json(resource);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource" });
+    }
+  });
+
   app.delete("/api/resources/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       await db.delete(resources).where(eq(resources.id, req.params.id));

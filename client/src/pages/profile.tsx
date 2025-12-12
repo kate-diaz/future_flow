@@ -327,6 +327,7 @@ function SkillsSection({
 export default function ProfilePage() {
   const { user, refetchUser } = useAuth();
   const { toast } = useToast();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState("");
   const [editingBio, setEditingBio] = useState("");
@@ -341,6 +342,17 @@ export default function ProfilePage() {
   const [localInterests, setLocalInterests] = useState<string[]>([]);
   const [localCareerPrefs, setLocalCareerPrefs] = useState<string[]>([]);
   const [localCerts, setLocalCerts] = useState<string[]>([]);
+
+  // Show welcome modal for students on first visit
+  useState(() => {
+    if (user?.role === "student") {
+      const hasSeenWelcome = localStorage.getItem(`welcome-modal-${user.id}`);
+      if (!hasSeenWelcome) {
+        setShowWelcomeModal(true);
+        localStorage.setItem(`welcome-modal-${user.id}`, "true");
+      }
+    }
+  });
 
   // Sync local state when profile loads
   useState(() => {
@@ -687,6 +699,23 @@ export default function ProfilePage() {
           />
         </div>
       </div>
+
+      {/* Welcome Modal for Students */}
+      <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Build Your Profile First</DialogTitle>
+            <DialogDescription>
+              Complete your profile to help us provide personalized recommendations and opportunities tailored to your career goals.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setShowWelcomeModal(false)}>
+              Get Started
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
