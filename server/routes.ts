@@ -2,7 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { 
   users, careers, opportunities, goals, resources, trainingPrograms,
-  profiles, savedOpportunities, progressRecords, academicModules, opportunityApplications
+  profiles, savedOpportunities, progressRecords, academicModules, opportunityApplications,
+  insertOpportunitySchema
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { storage } from "./storage";
@@ -38,6 +39,10 @@ export function registerRoutes(app: express.Application) {
     try {
       const { email, password, name, yearLevel, course } = req.body;
 
+      if (!email || !password || !name) {
+        return res.status(400).json({ error: "Missing required fields: email, password, name" });
+      }
+
       const existingUser = await db.query.users.findFirst({
         where: eq(users.email, email),
       });
@@ -52,7 +57,7 @@ export function registerRoutes(app: express.Application) {
         password,
         name,
         role: "student", // Force student role
-        yearLevel: parseInt(yearLevel),
+        yearLevel: yearLevel !== undefined && yearLevel !== null ? parseInt(yearLevel) : null,
         course: course || "Computer Engineering",
       }).returning();
 
@@ -96,7 +101,7 @@ export function registerRoutes(app: express.Application) {
 
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     if (!req.session.userId) {
-      return res.status(401).json({ error: "Not authenticated" });
+      return res.json({ user: null });
     }
 
     const user = await db.query.users.findFirst({
@@ -104,7 +109,7 @@ export function registerRoutes(app: express.Application) {
     });
 
     if (!user) {
-      return res.status(401).json({ error: "Not authenticated" });
+      return res.json({ user: null });
     }
 
     res.json({ user });
@@ -188,12 +193,12 @@ export function registerRoutes(app: express.Application) {
   // ========== OPPORTUNITIES CRUD ==========
   app.get("/api/opportunities", async (req: Request, res: Response) => {
     try {
-      const allOpportunities = await db.query.opportunities.findMany({
-        where: eq(opportunities.isActive, true),
-        orderBy: desc(opportunities.createdAt),
-      });
+      const type = typeof req.query.type === "string" ? req.query.type : undefined;
+      const industry = typeof req.query.industry === "string" ? req.query.industry : undefined;
+      const allOpportunities = await storage.getOpportunities({ type, industry });
       res.json(allOpportunities);
     } catch (error) {
+      console.error("Error fetching opportunities:", error);
       res.status(500).json({ error: "Failed to fetch opportunities" });
     }
   });
@@ -201,13 +206,10 @@ export function registerRoutes(app: express.Application) {
   // All specific routes MUST come before /:id route
   app.get("/api/opportunities/latest", async (req: Request, res: Response) => {
     try {
-      const latest = await db.query.opportunities.findMany({
-        where: eq(opportunities.isActive, true),
-        orderBy: desc(opportunities.createdAt),
-        limit: 3,
-      });
+      const latest = await storage.getLatestOpportunities(6);
       res.json(latest);
     } catch (error) {
+      console.error("Error fetching latest opportunities:", error);
       res.status(500).json({ error: "Failed to fetch opportunities" });
     }
   });
@@ -262,33 +264,66 @@ export function registerRoutes(app: express.Application) {
 
   app.post("/api/opportunities", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const [opportunity] = await db.insert(opportunities).values(req.body).returning();
+      const raw = req.body || {};
+      const normalized = {
+        ...raw,
+        // Normalize deadline to Date or undefined
+        deadline:
+          raw.deadline === null || raw.deadline === undefined
+            ? undefined
+            : typeof raw.deadline === "string"
+            ? new Date(raw.deadline)
+            : raw.deadline,
+      };
+      const parsed = insertOpportunitySchema.safeParse(normalized);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid opportunity payload", details: parsed.error.flatten() });
+      }
+      if (parsed.data.deadline && isNaN(parsed.data.deadline.getTime())) {
+        return res.status(400).json({ error: "Invalid deadline date" });
+      }
+      // Ensure default active flag
+      const values = { isActive: true, ...parsed.data };
+      // Insert and return created opportunity
+      const [opportunity] = await db.insert(opportunities).values(values).returning();
       res.json(opportunity);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create opportunity" });
+      const message = (error as any)?.message || "Failed to create opportunity";
+      console.error("Error creating opportunity:", message, error);
+      res.status(500).json({ error: message });
     }
   });
 
   app.put("/api/opportunities/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
+      const parsed = insertOpportunitySchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid opportunity payload", details: parsed.error.flatten() });
+      }
       const [opportunity] = await db.update(opportunities)
-        .set(req.body)
+        .set(parsed.data)
         .where(eq(opportunities.id, req.params.id))
         .returning();
       res.json(opportunity);
     } catch (error) {
+      console.error("Error updating opportunity:", error);
       res.status(500).json({ error: "Failed to update opportunity" });
     }
   });
 
   app.patch("/api/opportunities/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
+      const parsed = insertOpportunitySchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid opportunity payload", details: parsed.error.flatten() });
+      }
       const [opportunity] = await db.update(opportunities)
-        .set(req.body)
+        .set(parsed.data)
         .where(eq(opportunities.id, req.params.id))
         .returning();
       res.json(opportunity);
     } catch (error) {
+      console.error("Error updating opportunity (patch):", error);
       res.status(500).json({ error: "Failed to update opportunity" });
     }
   });
@@ -710,11 +745,13 @@ export function registerRoutes(app: express.Application) {
         
         // Create initial progress records for new skills
         for (const skill of newSkills) {
-          await db.insert(progressRecords).values({
-            userId: req.session.userId,
-            skillName: skill,
-            level: 25, // Start at beginner level
-          });
+          await db.insert(progressRecords).values([
+            {
+              userId: req.session.userId!,
+              skillName: skill,
+              level: 25, // Start at beginner level
+            },
+          ]).returning();
         }
       }
 
@@ -754,11 +791,13 @@ export function registerRoutes(app: express.Application) {
   app.post("/api/progress/skills/:skillName", requireAuth, async (req: Request, res: Response) => {
     try {
       const { level } = req.body;
-      await db.insert(progressRecords).values({
-        userId: req.session.userId,
-        skillName: req.params.skillName,
-        level: parseInt(level),
-      });
+      await db.insert(progressRecords).values([
+        {
+          userId: req.session.userId!,
+          skillName: req.params.skillName,
+          level: parseInt(level),
+        },
+      ]).returning();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update skill level" });

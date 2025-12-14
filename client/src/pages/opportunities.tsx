@@ -200,6 +200,8 @@ export default function OpportunitiesPage() {
   const [filterLocation, setFilterLocation] = useState<string>("all-locations");
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string>("");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
@@ -363,8 +365,12 @@ export default function OpportunitiesPage() {
       setIsCreateDialogOpen(false);
       setFormData({ title: "", company: "", description: "", type: "internship", location: "", industry: "", applicationUrl: "", deadline: "" });
     },
-    onError: () => {
-      toast({ title: "Failed to create opportunity", variant: "destructive" });
+    onError: async (error: any) => {
+      let message = "Failed to create opportunity";
+      if (error instanceof Error) message = error.message;
+      setErrorDetails(message);
+      setIsErrorDialogOpen(true);
+      toast({ title: "Creation error", description: message, variant: "destructive" });
     },
   });
 
@@ -378,8 +384,12 @@ export default function OpportunitiesPage() {
       setIsEditDialogOpen(false);
       setSelectedOpportunity(null);
     },
-    onError: () => {
-      toast({ title: "Failed to update opportunity", variant: "destructive" });
+    onError: async (error: any) => {
+      let message = "Failed to update opportunity";
+      if (error instanceof Error) message = error.message;
+      setErrorDetails(message);
+      setIsErrorDialogOpen(true);
+      toast({ title: "Update error", description: message, variant: "destructive" });
     },
   });
 
@@ -857,6 +867,27 @@ export default function OpportunitiesPage() {
                   {createOpportunityMutation.isPending ? "Creating..." : "Create Opportunity"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Error Details Dialog */}
+        <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                Something went wrong
+              </DialogTitle>
+              <DialogDescription>
+                Please review the error details below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-md bg-muted p-4 text-sm break-words">
+              {errorDetails || "Unknown error"}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsErrorDialogOpen(false)}>Close</Button>
             </div>
           </DialogContent>
         </Dialog>
